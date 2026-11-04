@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          bilibili视频下载
 // @namespace     https://github.com/injahow
-// @version       2.9.0
+// @version       2.9.1
 // @description   支持Web、RPC、Blob、Aria等下载方式；支持下载flv、dash、mp4视频格式；支持下载港区番剧；支持下载字幕弹幕；支持换源播放等功能
 // @author        injahow
 // @copyright     2021, injahow (https://github.com/injahow)
@@ -27,12 +27,25 @@
 // @[ You can find all source codes in GitHub repo ]
 !function() {
     "use strict";
+    var previousOverflow;
     var scroll_scroll = {
         show: function show_scroll() {
-            $("div#bp_config").is(":hidden") && $("div#message_box").is(":hidden") && $("body").css("overflow", "auto");
+            if (previousOverflow && $("#bp_config").is(":hidden") && $("#message_box").is(":hidden")) {
+                document.body.style.setProperty("overflow-x", previousOverflow.x, previousOverflow.xPriority);
+                document.body.style.setProperty("overflow-y", previousOverflow.y, previousOverflow.yPriority);
+                previousOverflow = undefined;
+            }
         },
         hide: function hide_scroll() {
-            $("body").css("overflow", "hidden");
+            if (previousOverflow) return;
+            var style = document.body.style;
+            previousOverflow = {
+                x: style.getPropertyValue("overflow-x"),
+                xPriority: style.getPropertyPriority("overflow-x"),
+                y: style.getPropertyValue("overflow-y"),
+                yPriority: style.getPropertyPriority("overflow-y")
+            };
+            style.setProperty("overflow", "hidden");
         }
     }, message = '<div class="message-bg"></div> <div id="message_box"> <div class="message-box-mark"></div> <div class="message-box-bg"> <span style="font-size:20px"><b>提示：</b></span> <div id="message_box_context" style="margin:2% 0">...</div><br/><br/> <div class="message-box-btn"> <button name="affirm">确定</button> <button name="cancel">取消</button> </div> </div> </div> <style>.message-bg{position:fixed;float:right;right:0;top:2%;z-index:30000}.message{margin-bottom:15px;padding:2% 2%;width:300px;display:flex;margin-top:-70px;opacity:0}.message-success{background-color:#dfd;border-left:6px solid #4caf50}.message-error{background-color:#fdd;border-left:6px solid #f44336}.message-info{background-color:#e7f3fe;border-left:6px solid #0c86de}.message-warning{background-color:#ffc;border-left:6px solid #ffeb3b}.message-context{font-size:21px;word-wrap:break-word;word-break:break-all}.message-context p{margin:0}#message_box{opacity:0;display:none;position:fixed;inset:0px;top:0;left:0;width:100%;height:100%;z-index:20000}.message-box-bg{position:absolute;background:#fff;border-radius:10px;padding:20px;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;z-index:20001}.message-box-mark{width:100%;height:100%;position:fixed;top:0;left:0;background:rgba(0,0,0,.5);z-index:20000}.message-box-btn{text-align:right}.message-box-btn button{margin:0 5px;width:120px;height:40px;border-width:0;border-radius:3px;background:#1e90ff;cursor:pointer;outline:0;color:#fff;font-size:17px}.message-box-btn button:hover{background:#59f}</style> ';
     function messageBox(ctx, type) {
@@ -1725,6 +1738,7 @@
                                         url: url,
                                         type: "GET",
                                         dataType: "text",
+                                        timeout: 8000,
                                         cache: !0
                                     });
 
@@ -1796,54 +1810,53 @@
         }) : Object.keys(cdn_map)).map(function(k) {
             return cdn_map[k](name, ver, filename);
         });
-    }, runtime_div = document.createElement("div");
-    runtime_div.id = "bp_runtime_div", runtime_div.style.display = "none", document.getElementById(runtime_div.id) || document.body.appendChild(runtime_div);
-    var JSZip, DPlayer, QRCode, md5, FFmpegWASM, initLocal = function initLocal(name, ver, filename, getModule, handleScript) {
-        handleScript = handleScript || function(script) {
-            return script;
-        };
-        try {
-            runtime_lib_asyncToGenerator(runtime_lib_regeneratorRuntime().mark(function _callee2() {
-                var script, blob, blob_url, script_tag;
-                return runtime_lib_regeneratorRuntime().wrap(function _callee2$(_context2) {
-                    for (;;) switch (_context2.prev = _context2.next) {
-                      case 0:
-                        return _context2.next = 2, new RuntimeLib({
-                            urls: urls({
-                                name: name,
-                                ver: ver,
-                                filename: filename
-                            }),
-                            getModule: getModule
-                        }).getModulePromise();
-
-                      case 2:
-                        return script = _context2.sent, _context2.t0 = Blob, _context2.next = 6, handleScript(script);
-
-                      case 6:
-                        _context2.t1 = _context2.sent, _context2.t2 = [ _context2.t1 ], _context2.t3 = {
-                            type: "text/javascript"
-                        }, blob = new _context2.t0(_context2.t2, _context2.t3), blob_url = URL.createObjectURL(blob), 
-                        (script_tag = document.createElement("script")).src = blob_url, script_tag.onload = function() {
-                            console.log("[Runtime Library] Loaded ".concat(name, " from local")), getModule(window), 
-                            URL.revokeObjectURL(blob_url);
-                        }, script_tag.onerror = function() {
-                            console.error("[Runtime Library] Failed to load ".concat(name, " from local")), 
-                            URL.revokeObjectURL(blob_url);
-                        }, runtime_div.appendChild(script_tag);
-
-                      case 16:
-                      case "end":
-                        return _context2.stop();
-                    }
-                }, _callee2);
-            }))().catch(function(err) {
-                console.error("[Runtime Library] Failed to load ".concat(name, " from local"), err);
-            });
-        } catch (err) {
-            console.error("[Runtime Library] Failed to load ".concat(name, " from local"), err);
-        }
     };
+    var FFmpegWASM, QRCode, md5;
+    var runtimeLibraries = {
+        zip: { name: "jszip", version: "3.10.0", file: "jszip.min.js", global: "JSZip" },
+        flv: { name: "flv.js", version: "1.6.2", file: "flv.min.js", global: "flvjs" },
+        player: { name: "dplayer", version: "1.26.0", file: "DPlayer.min.js", global: "DPlayer",
+            transform: function(code) { return code.replace('"About author"', '"About DIYgod"'); } },
+        qr: { name: "qrcodejs", version: "1.0.0", file: "qrcode.min.js", global: "QRCode" },
+        md5: { name: "blueimp-md5", version: "2.19.0", file: "js/md5.min.js", global: "md5" },
+        ffmpeg: { name: "@ffmpeg/ffmpeg", version: "0.12.15", file: "dist/umd/ffmpeg.js", global: "FFmpegWASM",
+            transform: function(code) { return code.replace("new URL(e.p+e.u(814),e.b)", "r.workerLoadURL"); } }
+    };
+    function loadRuntimeLibrary(key) {
+        var library = runtimeLibraries[key];
+        if (!library.pending) {
+            library.pending = new RuntimeLib({
+                urls: urls({ name: library.name, ver: library.version, filename: library.file })
+            }).getModulePromise().then(function(code) {
+                return new Promise(function(resolve, reject) {
+                    var script = document.createElement("script");
+                    var scriptUrl = URL.createObjectURL(new Blob([library.transform ? library.transform(code) : code], {
+                        type: "text/javascript"
+                    }));
+                    function cleanup() {
+                        script.remove();
+                        URL.revokeObjectURL(scriptUrl);
+                    }
+                    script.onload = function() {
+                        cleanup();
+                        var module = window[library.global];
+                        if (module) resolve(module);
+                        else reject(new Error(library.name + " 未初始化"));
+                    };
+                    script.onerror = function() {
+                        cleanup();
+                        reject(new Error(library.name + " 加载失败"));
+                    };
+                    script.src = scriptUrl;
+                    document.head.appendChild(script);
+                });
+            }).catch(function(err) {
+                library.pending = undefined;
+                throw err;
+            });
+        }
+        return library.pending;
+    }
     function get_bili_player_id() {
         return $("#bilibiliPlayer")[0] ? "#bilibiliPlayer" : $("#bilibili-player")[0] ? "#bilibili-player" : $("#edu-player")[0] ? "div.bpx-player-primary-area" : void 0;
     }
@@ -1866,27 +1879,25 @@
         var style = "" + '<style id="dplayer_danmaku_style">\n        .dplayer-danmaku .dplayer-danmaku-right.dplayer-danmaku-move {\n            animation-duration: '.concat(parseFloat(config_config.danmaku_speed), "s;\n            font-size: ").concat(parseInt(config_config.danmaku_fontsize), "px;\n        }\n        </style>");
         $("#dplayer_danmaku_style")[0] && $("#dplayer_danmaku_style").remove(), $("body").append(style);
     }
-    initLocal("jszip", "3.10.0", "jszip.min.js", function(w) {
-        return JSZip = w.JSZip;
-    }), initLocal("flv.js", "1.6.2", "flv.min.js", function(w) {
-        return w.flvjs;
-    }), initLocal("dplayer", "1.26.0", "DPlayer.min.js", function(w) {
-        return DPlayer = w.DPlayer;
-    }, function(script) {
-        return script.replace('"About author"', '"About DIYgod"');
-    }), initLocal("qrcodejs", "1.0.0", "qrcode.min.js", function(w) {
-        return QRCode = w.QRCode;
-    }), initLocal("blueimp-md5", "2.19.0", "js/md5.min.js", function(w) {
-        return md5 = w.md5;
-    }), initLocal("@ffmpeg/ffmpeg", "0.12.15", "dist/umd/ffmpeg.js", function(w) {
-        return FFmpegWASM = w.FFmpegWASM;
-    }, function(script) {
-        return script.replace("new URL(e.p+e.u(814),e.b)", "r.workerLoadURL");
-    });
     var player = {
         bili_video_tag: bili_video_tag,
         recover_player: recover_player,
-        replace_player: function replace_player(url, url_2) {
+        replace_player: async function replace_player(url, url_2) {
+            var href = location.href;
+            var DPlayer;
+            try {
+                if (/\.flv(?:[?#]|$)/i.test(url)) await loadRuntimeLibrary("flv");
+                DPlayer = await loadRuntimeLibrary("player");
+            } catch (err) {
+                console.warn("换源播放器加载失败", err);
+                message_Message_warning("换源播放器加载失败");
+                return;
+            }
+            if (href !== location.href || url !== $("#video_url").attr("href")) return;
+            if (!document.getElementById("bp_dplayer_css")) {
+                $("<link>", { id: "bp_dplayer_css", rel: "stylesheet",
+                    href: "https://cdn.bootcdn.net/ajax/libs/dplayer/1.25.0/DPlayer.min.css" }).appendTo("head");
+            }
             recover_player();
             var bili_video = $(bili_video_tag())[0];
             bili_video_stop(), bili_video && bili_video.addEventListener("play", bili_video_stop, !1);
@@ -3230,7 +3241,8 @@
     }
     async function save_batch_subtitles(videos, directory, archiveName) {
         try {
-            var zip = new JSZip();
+            var Zip = await loadRuntimeLibrary("zip");
+            var zip = new Zip();
             var saved = 0;
             for (var index = 0; index < videos.length; index++) {
                 var task = videos[index];
@@ -3310,9 +3322,16 @@
                 });
             }(url, filename, null, rpc_type());
         },
-        download_blob_merge: function download_blob_merge(video_url, audio_url, filename) {
+        download_blob_merge: async function download_blob_merge(video_url, audio_url, filename) {
             if (download_blob_merge_clicked) return message_Message_miaow(), void (need_show_merge_progress = !0);
             download_blob_merge_clicked = !0, need_show_merge_progress = !0;
+            try {
+                FFmpegWASM = await loadRuntimeLibrary("ffmpeg");
+            } catch (err) {
+                download_blob_merge_clicked = !1;
+                message_Message_error("FFmpeg 加载失败，请重试");
+                return;
+            }
             var controller = new AbortController;
             function show_merge_progress(_ref6) {
                 var message = _ref6.message, loaded = _ref6.loaded, total = _ref6.total, isFinished = _ref6.isFinished;
@@ -3389,7 +3408,11 @@
                 (dl_video || dl_audio) && ("post" === rpc_type() && "0" !== config_config.show_motrix_confirm ? checkMotrixRunningBeforeExecute(function() {
                     download_videos([].concat(video_tasks));
                 }) : download_videos([].concat(video_tasks))), dl_subtitle && save_batch_subtitles(video_tasks, subtitleDirectory, vb.getFilename() + "_vtt.zip"), 
-                dl_danmaku && (1 === video_tasks.length ? download_danmaku_ass(video_tasks[0].cid, video_tasks[0].filename) : download_danmaku_ass_zip([].concat(video_tasks), new JSZip));
+                dl_danmaku && (1 === video_tasks.length ? download_danmaku_ass(video_tasks[0].cid, video_tasks[0].filename) : loadRuntimeLibrary("zip").then(function(Zip) {
+                    download_danmaku_ass_zip(video_tasks.slice(), new Zip());
+                }).catch(function() {
+                    message_Message_warning("弹幕压缩组件加载失败");
+                }));
             }), $("#dl_format").val(config_config.format), $("#dl_quality").val(q);
             var dl_format_change_evt = function dl_format_change_evt(format) {
                 "dash" === format ? ($("#dl_audio").prop("checked", !0).parent().css("color", "rgba(0,0,0,1)"), 
@@ -3621,7 +3644,7 @@
         download_subtitle_vtt: download_subtitle_vtt,
         open_ariang: open_ariang,
         get_ariang_set_hash: get_ariang_set_hash
-    }, config = '<div id="bp_config"> <div class="config-mark"></div> <div class="config-bg"> <span style="font-size:20px;display:block;margin-bottom:15px"> <b>bilibili视频下载 参数设置</b> <b> <a href="javascript:;" id="reset_config"> [重置] </a> <a style="text-decoration:underline" href="javascript:;" id="show_help">&lt;通知/帮助&gt;</a> </b> </span> <div style="display:flex;gap:10px;height:480px"> <div style="flex-shrink:0;border-right:1px solid #ddd;padding-right:10px;overflow-y:auto"> <ul style="list-style:none;padding:0;margin:0;font-size:14px"> <li><a href="javascript:;" data-tab="basic" class="tab-link active">基本设置</a></li> <li><a href="javascript:;" data-tab="download" class="tab-link">下载设置</a></li> <li><a href="javascript:;" data-tab="other" class="tab-link">其他设置</a></li> </ul> </div> <div id="tab-content" style="flex:1;overflow-y:auto;padding-left:10px;font-size:14px"> <div class="tab-panel" data-id="basic"> <div style="margin:2% 0"> <label>请求地址：</label> <input id="base_api" style="width:40%"/>&nbsp;&nbsp;&nbsp;&nbsp; <label>请求方式：</label> <select id="request_type"> <option value="auto">自动判断</option> <option value="local">本地请求</option> <option value="remote">远程请求</option> </select><br/> <small>注意：普通使用请勿修改；默认使用混合请求</small> </div> <div style="margin:2% 0"> <label>视频格式：</label> <select id="format"> <option value="mp4">MP4</option> <option value="flv">FLV</option> <option value="dash">DASH</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>切换CDN：</label> <select id="host_key"> {{host_key_options}} </select><br/> <small>注意：无法选择MP4清晰度；建议特殊地区或播放异常时切换（自行选择合适线路）</small> </div> <div style="margin:2% 0"> <label>视频质量：</label> <select id="video_quality"> {{video_quality_options}} </select><br/> <small>提示：脚本识别错误时可手动设置请求的视频质量参数</small> </div> <div style="margin:2% 0"> <label>下载方式：</label> <select id="download_type"> <option value="a">URL链接</option> <option value="web">Web请求</option> <option value="aria">Aria2命令</option> <option value="blob">Blob请求</option> <option value="blob_merge">Blob合并</option> <option value="rpc">RPC接口</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>AriaNg地址：</label> <input id="ariang_host" style="width:40%"/><br/> <small>提示：建议使用RPC请求下载；非HTTPS或非本地RPC域名使用AriaNg下载</small> </div> <div style="margin:2% 0"> <label>RPC配置：[ 域名 : 端口 | 路径 | 密钥 ]</label> <a class="setting-context" href="javascript:;" id="ariang_sync_config">同步至AriaNg</a><br/> <input id="rpc_domain" placeholder="ws://192.168.1.1" style="width:25%"/> : <input id="rpc_port" placeholder="6800" style="width:10%"/> | <input id="rpc_path" placeholder="/jsonrpc" style="width:20%"/> | <input id="rpc_token" placeholder="未设置不填" style="width:15%;color:transparent" onFocus="this.style.color=\'black\';" onBlur="this.style.color=\'transparent\';"/><br/> <small>注意：RPC默认使用Motrix（需要安装并运行）下载，其他软件请修改参数</small> </div> <div style="margin:2% 0"> <label>自动下载：</label> <select id="auto_download"> <option value="0">关闭</option> <option value="1">开启</option> </select><br/> <small>说明：请求地址成功后将自动点击下载视频按钮</small> </div> <div style="margin:2% 0"> <label>授权状态：</label> <select id="auth" disabled="disabled"> <option value="0">未授权</option> <option value="1">已授权</option> </select> <a class="setting-context" href="javascript:;" id="show_login">扫码授权</a> <a class="setting-context" href="javascript:;" id="show_login_2">网页授权</a> <a class="setting-context" href="javascript:;" id="show_logout">取消授权</a> <a class="setting-context" href="javascript:;" id="show_login_help">授权说明</a> </div> </div> <div class="tab-panel" data-id="download"> <div style="margin:2% 0"> <label>RPC下载目录：</label> <input id="rpc_dir" placeholder="留空使用默认目录" style="width:70%"/> </div> <div style="margin:2% 0"> <label>AriaNg下载目录：</label> <input id="ariang_dir" placeholder="留空使用默认目录" style="width:70%"/> </div> <div style="margin:2% 0"> <span>[Aria2参数]</span><br/> <label>最大连接：</label> <select id="aria2c_connection_level"> <option value="min">1</option> <option value="mid">8</option> <option value="max">16</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>附加参数：</label> <input id="aria2c_addition_parameters" placeholder="见Aria2c文档" style="width:40%"/><br/> <small>说明：用于配置Aria2命令下载方式的参数</small> </div> <div style="margin:2% 0"> <label>提示启动Motrix：</label> <select id="show_motrix_confirm"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：使用RPC（POST）请求下载时，如果接口不通会弹窗提示是否启动Motrix</small> </div> <div style="margin:2% 0"> <label>自动启动Motrix：</label> <select id="show_motrix_confirm_open_auto"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：启用提示启动Motrix时，不再弹窗提示，自动启动Motrix</small> </div> <div style="margin:2% 0"> <label>自动滚动加载：</label> <select id="video_list_auto_scroll_load"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：批量下载时，收藏视频的视频列表可能因数量过多而未加载所有数据，只显示局部的视频数据</small> </div> </div> <div class="tab-panel" data-id="other" style="display:none"> <div style="margin:2% 0"> <label>强制换源：</label> <select id="replace_force"> <option value="0">关闭</option> <option value="1">开启</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>弹幕速度：</label> <input id="danmaku_speed" style="width:10%"/> s&nbsp;&nbsp;&nbsp;&nbsp; <label>弹幕字号：</label> <input id="danmaku_fontsize" style="width:10%"/> px&nbsp;&nbsp;&nbsp;&nbsp; <small>说明：使用请求到的视频地址在DPlayer进行播放；弹幕速度为弹幕滑过DPlayer的时间</small> </div> <div style="margin:2% 0"> <label>UI超时时间：</label> <input id="show_ui_timeout" style="width:10%"> s <small>说明：脚本初始化时，超时没有正常显示UI的检查时间，数值填写正整数</small> </div> <div style="margin:2% 0"> <label>UI加载提示：</label> <select id="show_ui_confirm"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：脚本初始化UI时，如果检测到页面异常会进行弹窗提示是否手动加载</small> </div> <div style="margin:2% 0"> <label>UI强制加载：</label> <select id="show_ui_confirm_load_force"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：启用UI加载超时弹窗时，自动确认强制加载UI，可能导致页面异常</small> </div> </div> </div> </div> <div style="text-align:right;margin-top:20px"> <button class="setting-button" id="save_config">确定</button> </div> </div> <style>#bp_config{opacity:0;display:none;position:fixed;inset:0px;top:0;left:0;width:100%;height:100%;z-index:10000}#bp_config .config-bg{position:absolute;background:#fff;border-radius:10px;padding:20px;top:50%;left:50%;transform:translate(-50%,-50%);width:700px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:10001}#bp_config .config-mark{width:100%;height:100%;position:fixed;top:0;left:0;background:rgba(0,0,0,.5);z-index:10000}#bp_config .setting-button{width:120px;height:40px;border-width:0;border-radius:3px;background:#1e90ff;cursor:pointer;outline:0;color:#fff;font-size:17px}#bp_config .setting-button:hover{background:#59f}#bp_config .setting-context{margin:0 1%;color:#00f}#bp_config .setting-context:hover{color:red}#bp_config .tab-link{display:block;padding:8px 10px;margin:4px 0;border-radius:4px;color:#333;text-decoration:none;font-weight:500;transition:all .2s}#bp_config .tab-link:hover{background:#eef5ff}#bp_config .tab-link.active{background:#1e90ff;color:#fff}#bp_config small{color:#666;font-size:12px;margin-top:4px;display:block}#bp_config label{font-weight:500;min-width:60px;display:inline-block}#bp_config input,#bp_config select{padding:4px 6px;border:1px solid #ccc;border-radius:3px}#bp_config input:focus,#bp_config select:focus{border-color:#1e90ff;outline:0}</style> </div> ';
+    }, config = '<div id="bp_config"> <div class="config-mark"></div> <div class="config-bg"> <span style="font-size:20px;display:block;margin-bottom:15px"> <b>bilibili视频下载 参数设置</b> <b> <a href="javascript:;" id="reset_config"> [重置] </a> <a style="text-decoration:underline" href="javascript:;" id="show_help">&lt;通知/帮助&gt;</a> </b> </span> <div style="display:flex;gap:10px;height:480px"> <div style="flex-shrink:0;border-right:1px solid #ddd;padding-right:10px;overflow-y:auto"> <ul style="list-style:none;padding:0;margin:0;font-size:14px"> <li><a href="javascript:;" data-tab="basic" class="tab-link active">基本设置</a></li> <li><a href="javascript:;" data-tab="download" class="tab-link">下载设置</a></li> <li><a href="javascript:;" data-tab="other" class="tab-link">其他设置</a></li> </ul> </div> <div id="tab-content" style="flex:1;overflow-y:auto;padding-left:10px;font-size:14px"> <div class="tab-panel" data-id="basic"> <div style="margin:2% 0"> <label>请求地址：</label> <input id="base_api" style="width:40%"/>&nbsp;&nbsp;&nbsp;&nbsp; <label>请求方式：</label> <select id="request_type"> <option value="auto">自动判断</option> <option value="local">本地请求</option> <option value="remote">远程请求</option> </select><br/> <small>注意：普通使用请勿修改；默认使用混合请求</small> </div> <div style="margin:2% 0"> <label>视频格式：</label> <select id="format"> <option value="mp4">MP4</option> <option value="flv">FLV</option> <option value="dash">DASH</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>切换CDN：</label> <select id="host_key"> {{host_key_options}} </select><br/> <small>注意：无法选择MP4清晰度；建议特殊地区或播放异常时切换（自行选择合适线路）</small> </div> <div style="margin:2% 0"> <label>视频质量：</label> <select id="video_quality"> {{video_quality_options}} </select><br/> <small>提示：脚本识别错误时可手动设置请求的视频质量参数</small> </div> <div style="margin:2% 0"> <label>下载方式：</label> <select id="download_type"> <option value="a">URL链接</option> <option value="web">Web请求</option> <option value="aria">Aria2命令</option> <option value="blob">Blob请求</option> <option value="blob_merge">Blob合并</option> <option value="rpc">RPC接口</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>AriaNg地址：</label> <input id="ariang_host" style="width:40%"/><br/> <small>提示：建议使用RPC请求下载；非HTTPS或非本地RPC域名使用AriaNg下载</small> </div> <div style="margin:2% 0"> <label>RPC配置：[ 域名 : 端口 | 路径 | 密钥 ]</label> <a class="setting-context" href="javascript:;" id="ariang_sync_config">同步至AriaNg</a><br/> <input id="rpc_domain" placeholder="ws://192.168.1.1" style="width:25%"/> : <input id="rpc_port" placeholder="6800" style="width:10%"/> | <input id="rpc_path" placeholder="/jsonrpc" style="width:20%"/> | <input id="rpc_token" placeholder="未设置不填" style="width:15%;color:transparent" onFocus="this.style.color=\'black\';" onBlur="this.style.color=\'transparent\';"/><br/> <small>注意：RPC默认使用Motrix（需要安装并运行）下载，其他软件请修改参数</small> </div> <div style="margin:2% 0"> <label>自动下载：</label> <select id="auto_download"> <option value="0">关闭</option> <option value="1">开启</option> </select><br/> <small>说明：请求地址成功后将自动点击下载视频按钮</small> </div> <div style="margin:2% 0"> <label>授权状态：</label> <select id="auth" disabled="disabled"> <option value="0">未授权</option> <option value="1">已授权</option> </select> <a class="setting-context" href="javascript:;" id="show_login">扫码授权</a> <a class="setting-context" href="javascript:;" id="show_login_2">网页授权</a> <a class="setting-context" href="javascript:;" id="show_logout">取消授权</a> <a class="setting-context" href="javascript:;" id="show_login_help">授权说明</a> </div> </div> <div class="tab-panel" data-id="download"> <div style="margin:2% 0"> <label>RPC下载目录：</label> <input id="rpc_dir" placeholder="留空使用默认目录" style="width:70%"/> </div> <div style="margin:2% 0"> <label>AriaNg下载目录：</label> <input id="ariang_dir" placeholder="留空使用默认目录" style="width:70%"/> </div> <div style="margin:2% 0"> <span>[Aria2参数]</span><br/> <label>最大连接：</label> <select id="aria2c_connection_level"> <option value="min">1</option> <option value="mid">8</option> <option value="max">16</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>附加参数：</label> <input id="aria2c_addition_parameters" placeholder="见Aria2c文档" style="width:40%"/><br/> <small>说明：用于配置Aria2命令下载方式的参数</small> </div> <div style="margin:2% 0"> <label>提示启动Motrix：</label> <select id="show_motrix_confirm"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：使用RPC（POST）请求下载时，如果接口不通会弹窗提示是否启动Motrix</small> </div> <div style="margin:2% 0"> <label>自动启动Motrix：</label> <select id="show_motrix_confirm_open_auto"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：启用提示启动Motrix时，不再弹窗提示，自动启动Motrix</small> </div> <div style="margin:2% 0"> <label>自动滚动加载：</label> <select id="video_list_auto_scroll_load"> <option value="0">关闭</option> <option value="1">开启</option> </select> <small>说明：批量下载时，收藏视频的视频列表可能因数量过多而未加载所有数据，只显示局部的视频数据</small> </div> </div> <div class="tab-panel" data-id="other" style="display:none"> <div style="margin:2% 0"> <label>强制换源：</label> <select id="replace_force"> <option value="0">关闭</option> <option value="1">开启</option> </select>&nbsp;&nbsp;&nbsp;&nbsp; <label>弹幕速度：</label> <input id="danmaku_speed" style="width:10%"/> s&nbsp;&nbsp;&nbsp;&nbsp; <label>弹幕字号：</label> <input id="danmaku_fontsize" style="width:10%"/> px&nbsp;&nbsp;&nbsp;&nbsp; <small>说明：使用请求到的视频地址在DPlayer进行播放；弹幕速度为弹幕滑过DPlayer的时间</small> </div> </div> </div> </div> <div style="text-align:right;margin-top:20px"> <button class="setting-button" id="save_config">确定</button> </div> </div> <style>#bp_config{opacity:0;display:none;position:fixed;inset:0px;top:0;left:0;width:100%;height:100%;z-index:10000}#bp_config .config-bg{position:absolute;background:#fff;border-radius:10px;padding:20px;top:50%;left:50%;transform:translate(-50%,-50%);width:700px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:10001}#bp_config .config-mark{width:100%;height:100%;position:fixed;top:0;left:0;background:rgba(0,0,0,.5);z-index:10000}#bp_config .setting-button{width:120px;height:40px;border-width:0;border-radius:3px;background:#1e90ff;cursor:pointer;outline:0;color:#fff;font-size:17px}#bp_config .setting-button:hover{background:#59f}#bp_config .setting-context{margin:0 1%;color:#00f}#bp_config .setting-context:hover{color:red}#bp_config .tab-link{display:block;padding:8px 10px;margin:4px 0;border-radius:4px;color:#333;text-decoration:none;font-weight:500;transition:all .2s}#bp_config .tab-link:hover{background:#eef5ff}#bp_config .tab-link.active{background:#1e90ff;color:#fff}#bp_config small{color:#666;font-size:12px;margin-top:4px;display:block}#bp_config label{font-weight:500;min-width:60px;display:inline-block}#bp_config input,#bp_config select{padding:4px 6px;border:1px solid #ccc;border-radius:3px}#bp_config input:focus,#bp_config select:focus{border-color:#1e90ff;outline:0}</style> </div> ';
     function config_typeof(o) {
         return config_typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
             return typeof o;
@@ -3690,9 +3713,6 @@
         video_quality: "0",
         danmaku_speed: "15",
         danmaku_fontsize: "22",
-        show_ui_timeout: "6",
-        show_ui_confirm: "0",
-        show_ui_confirm_load_force: "0",
         show_motrix_confirm: "0",
         show_motrix_confirm_open_auto: "0",
         video_list_auto_scroll_load: "0"
@@ -3930,9 +3950,19 @@
             }
         }, {
             key: "_login",
-            value: function _login(resolve) {
+            value: async function _login(resolve, needsQrCode) {
                 var _this2 = this;
-                this.auth_clicked ? message_Message_miaow() : (this.auth_clicked = !0, ajax({
+                if (this.auth_clicked) return message_Message_miaow();
+                this.auth_clicked = !0;
+                try {
+                    md5 = await loadRuntimeLibrary("md5");
+                    if (needsQrCode) QRCode = await loadRuntimeLibrary("qr");
+                } catch (err) {
+                    this.auth_clicked = !1;
+                    message_Message_warning("授权组件加载失败，请重试");
+                    return;
+                }
+                ajax({
                     url: "https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code",
                     type: "POST",
                     data: this.makeAPIData({
@@ -3943,7 +3973,7 @@
                     }, this.TV_SEC)
                 }).then(resolve).catch(function() {
                     return _this2.auth_clicked = !1;
-                }));
+                });
             }
         }, {
             key: "login",
@@ -3983,7 +4013,7 @@
                             });
                         }, 3e3);
                     }
-                });
+                }, true);
             }
         }, {
             key: "loginWeb",
@@ -4188,107 +4218,31 @@
         test: function test() {
             MessageBox_alert();
         }
-    }, more_style = "<style>.more{float:right;padding:1px;cursor:pointer;color:#757575;font-size:16px;transition:all .3s;position:relative;text-align:center}.more:hover .more-ops-list{display:block}.more-ops-list{display:none;position:absolute;width:80px;left:-15px;z-index:30;text-align:center;padding:10px 0;background:#fff;border:1px solid #e5e9ef;box-shadow:0 2px 4px 0 rgba(0,0,0,.14);border-radius:2px;font-size:14px;color:#222}.more-ops-list li{position:relative;height:34px;line-height:34px;cursor:pointer;transition:all .3s}.more-ops-list li:hover{color:#00a1d6;background:#e7e7e7}</style> ", btn_list = {
-        setting_btn: "脚本设置",
-        bilibili_parse: "请求地址",
-        video_download: "下载视频",
-        video_download_2: "下载音频",
-        video_download_all: "批量下载",
-        more: {
-            download_danmaku: "下载弹幕",
-            download_subtitle: "下载字幕",
-            test: "测试功能"
-        }
-    }, download_svg = '<svg class width="28" height="28" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" xml:space="preserve">\n        <path fill="#757575" d="M16.015,0C7.186,0,0.03,7.157,0.03,15.985 S7.186,31.97,16.015,31.97S32,24.814,32,15.985S24.843,0,16.015,0z"/>\n        <path style="fill:#FFFFFF;" d="M16.942,23.642H9.109C8.496,23.642,8,24.17,8,24.821v0C8,25.472,8.496,26,9.109,26h14.783 C24.504,26,25,25.472,25,24.821v0c0-0.651-0.496-1.179-1.109-1.179H16.942z"/>\n        <path style="fill:#FFFFFF;" d="M8.798,16.998l6.729,6.33c0.398,0.375,1.029,0.375,1.427,0l6.729-6.33 c0.666-0.627,0.212-1.726-0.714-1.726h-3.382c-0.568,0-1.028-0.449-1.028-1.003V8.003C18.56,7.449,18.099,7,17.532,7h-2.582 c-0.568,0-1.028,0.449-1.028,1.003v6.266c0,0.554-0.46,1.003-1.028,1.003H9.511C8.586,15.273,8.132,16.372,8.798,16.998z"/>\n    </svg>', svg_map = {
-        setting_btn: '<svg class width="28" height="28" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" xml:space="preserve">\n        <path fill="#757575" style="stroke-miterlimit:10;" d="M16,29.5L16,29.5c-0.828,0-1.5-0.672-1.5-1.5V4c0-0.828,0.672-1.5,1.5-1.5h0 c0.828,0,1.5,0.672,1.5,1.5v24C17.5,28.828,16.828,29.5,16,29.5z"/>\n        <path fill="#757575" style="stroke-miterlimit:10;" d="M29.5,16L29.5,16c0,0.828-0.672,1.5-1.5,1.5H4c-0.828,0-1.5-0.672-1.5-1.5v0 c0-0.828,0.672-1.5,1.5-1.5h24C28.828,14.5,29.5,15.172,29.5,16z"/>\n    </svg>',
-        bilibili_parse: '<svg class width="28" height="28" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 32 32" xml:space="preserve">\n        <path fill="#757575" d="M28.282,13.508c-0.623-6.932-6.627-12.036-13.41-11.399C8.947,2.665,4.254,7.465,3.716,13.521 c0.786,0.404,1.283,1.226,1.284,2.126v4.157c-0.023,0.565-0.49,1.004-1.043,0.98c-0.521-0.022-0.938-0.448-0.959-0.98v-4.157 c0-0.188-0.113-0.452-0.508-0.452s-0.492,0.275-0.492,0.452v8.176c0,2.446,1.94,4.428,4.333,4.428c0,0,0,0,0,0h7.191 c0.552-1.396,2.107-2.07,3.473-1.505s2.025,2.154,1.473,3.549c-0.552,1.396-2.107,2.07-3.473,1.505 c-0.67-0.277-1.202-0.82-1.473-1.505h-7.19c-3.497,0-6.332-2.897-6.333-6.471l0,0v-8.178c0-1.077,0.706-2.02,1.723-2.303C2.429,5.285,9.393-0.662,17.278,0.059c6.952,0.636,12.445,6.297,13.009,13.407c1.032,0.404,1.713,1.416,1.712,2.545v4.088 c-0.038,1.505-1.262,2.694-2.735,2.656c-1.42-0.037-2.562-1.205-2.599-2.656l0,0v-4.085C26.667,14.924,27.302,13.939,28.282,13.508zM11.334,14.653c-1.105,0-2-0.915-2-2.044s0.896-2.044,2-2.044l0,0c1.105,0,2,0.915,2,2.044S12.439,14.653,11.334,14.653z M20.666,14.653c-1.105,0-2-0.915-2-2.044s0.896-2.044,2-2.044l0,0c1.105,0,2,0.915,2,2.044S21.771,14.653,20.666,14.653z M13.629,21.805c-2.167,0-3.962-1.653-3.962-3.748c0-0.564,0.448-1.022,1-1.022c0.552,0,1,0.458,1,1.022 c0,0.916,0.856,1.704,1.962,1.704c0.612,0.012,1.198-0.253,1.602-0.723c0.352-0.433,0.982-0.493,1.406-0.132 c0,0,0.001,0.001,0.001,0.001c0.047,0.039,0.09,0.083,0.128,0.131c0.404,0.47,0.99,0.734,1.602,0.723 c1.106,0,1.964-0.788,1.964-1.704c0-0.564,0.448-1.022,1-1.022c0.552,0,1,0.458,1,1.022c0,2.095-1.797,3.748-3.964,3.748 c-0.844,0.003-1.67-0.256-2.368-0.742C15.302,21.55,14.475,21.809,13.629,21.805z M29.332,15.333c-0.368,0-0.666,0.305-0.666,0.68 v4.088c-0.001,0.376,0.297,0.681,0.665,0.681c0.368,0.001,0.666-0.304,0.666-0.679c0-0.001,0-0.001,0-0.002v-4.088 c0.002-0.374-0.293-0.678-0.659-0.68c-0.001,0-0.002,0-0.003,0H29.332z"/>\n    </svg>',
-        video_download: download_svg,
-        video_download_2: download_svg,
-        video_download_all: download_svg
     };
-    function showVideoToolbar(toolbar_id) {
-        var toolbar_obj = $("#".concat(toolbar_id)), toolbar_obj_2 = toolbar_obj.clone();
-        toolbar_obj_2.attr("id", "bp_toolbar");
-        var left = toolbar_obj_2.find(".video-toolbar-left"), right = toolbar_obj_2.find(".video-toolbar-right");
-        left.children().remove(), right.children().remove(), Object.keys(btn_list).map(function(key) {
-            if ("more" !== key) {
-                var item = toolbar_obj.find(".toolbar-left-item-wrap").eq(0).clone();
-                item.attr("id", key);
-                var svg = svg_map[key].replaceAll("#757575", "currentColor").replace("class", 'class="'.concat(item.find("svg").attr("class"), '"')), span = item.find("span").text(btn_list[key]), item_div = item.find("div").eq(0);
-                item_div.attr("title", btn_list[key]), item_div.removeClass("on"), item_div.children().remove(), 
-                item_div.append(svg).append(span), left.append(item);
-            } else {
-                var more_map = btn_list[key], el = "" + '<div class="more">更多<div class="more-ops-list">\n                    <ul>'.concat(Object.keys(more_map).map(function(key) {
-                    return '<li><span id="'.concat(key, '">').concat(more_map[key], "</span></li>");
-                }).join(""), "</ul>\n                </div>");
-                right.append(el + more_style);
-            }
-        }), toolbar_obj.after(toolbar_obj_2);
-    }
-    function initToolbar() {
-        if ($("#bp_toolbar")[0]) return;
-        if ($("#arc_toolbar_report")[0]) showVideoToolbar("arc_toolbar_report"); else if ($("#playlistToolbar")[0]) showVideoToolbar("playlistToolbar"); else if ($("#videoToolbar")[0]) !function showFestivalToolbar(toolbar_id) {
-            var toolbar_obj = $("#".concat(toolbar_id)), toolbar_obj_2 = toolbar_obj.clone();
-            toolbar_obj_2.attr("id", "bp_toolbar");
-            var left = toolbar_obj_2.find(".video-toolbar-content_left"), right = toolbar_obj_2.find(".video-toolbar-content_right");
-            toolbar_obj_2.find(".video-toobar_title").remove(), left.children().remove();
-            var watchlater = right.find(".watchlater").clone();
-            right.children().remove(), right.append(watchlater), toolbar_obj_2.find(".video-desc-wrapper").remove(), 
-            Object.keys(btn_list).map(function(key) {
-                if ("more" !== key) {
-                    var item = toolbar_obj.find(".video-toolbar-content_item").eq(0).clone();
-                    item.attr("id", key), item.attr("title", btn_list[key]);
-                    var svg = svg_map[key].replaceAll("#757575", "currentColor"), item_icon = item.find(".content-item_icon").eq(0);
-                    item_icon.removeClass("ic_like"), item_icon.html(svg), item.html(""), item.append(item_icon), 
-                    item.append(btn_list[key]), left.append(item);
-                } else {
-                    var list = watchlater.find(".more-list"), list_li = list.children().eq(0);
-                    list.children().remove();
-                    var more_map = btn_list[key];
-                    Object.keys(more_map).map(function(key) {
-                        var li = list_li.clone();
-                        li.html('<span id="'.concat(key, '">').concat(more_map[key], "</span>")), list.append(li);
-                    });
-                }
-            }), toolbar_obj.after(toolbar_obj_2);
-        }("videoToolbar"); else if ($(".toolbar")[0]) !function showBangumiToolbar(toolbar_class) {
-            var toolbar_obj = $(".".concat(toolbar_class)).eq(0), toolbar_obj_2 = toolbar_obj.clone();
-            toolbar_obj_2.attr("id", "bp_toolbar");
-            var left = toolbar_obj_2.find(".toolbar-left"), right = toolbar_obj_2.find(".toolbar-right");
-            left.children().remove(), right.children().remove(), Object.keys(btn_list).map(function(key) {
-                if ("more" !== key) {
-                    var item = toolbar_obj.find(".toolbar-left").children().eq(0).clone();
-                    item.attr("id", key), item.attr("title", btn_list[key]);
-                    var svg = svg_map[key].replaceAll("#757575", "currentColor").replace("class", 'class="'.concat(item.find("svg").attr("class"), '"')), span = item.find("span").text(btn_list[key]);
-                    item.children().remove(), item.append(svg).append(span), left.append(item);
-                } else {
-                    var more_map = btn_list[key], el = "" + '<div class="more">更多<div class="more-ops-list">\n                    <ul>'.concat(Object.keys(more_map).map(function(key) {
-                        return '<li><span id="'.concat(key, '">').concat(more_map[key], "</span></li>");
-                    }).join(""), "</ul>\n                </div>");
-                    right.append(el + more_style);
-                }
-            }), toolbar_obj.after(toolbar_obj_2);
-        }("toolbar"); else if ($(".edu-play-left").children().eq(1)[0]) {
-            var toolbar_obj = $(".edu-play-left").children().eq(1), toolbar_class = toolbar_obj.attr("class"), span_class = toolbar_obj.children().eq(0).attr("class"), span_class_svg = toolbar_obj.children().eq(0).children().eq(0).attr("class"), span_class_text = toolbar_obj.children().eq(0).children().eq(1).attr("class");
-            toolbar_obj.after(function make_toolbar_bangumi(main_class_name, sub_class_names) {
-                var toolbar_elements = Object.keys(btn_list).map(function(key) {
-                    if ("more" === key) {
-                        var more_map = btn_list[key];
-                        return "" + '<div class="more">更多<div class="more-ops-list">\n                    <ul>'.concat(Object.keys(more_map).map(function(key) {
-                            return function more_element(id, name) {
-                                return '<li><span id="'.concat(id, '">').concat(name, "</span></li>");
-                            }(key, more_map[key]);
-                        }).join(""), "</ul>\n                </div>");
-                    }
-                    return function list_element(id, class_names, svg, name) {
-                        return "" + '<div id="'.concat(id, '" mr-show="" class="').concat(class_names[0], '">\n                <span class="').concat(class_names[1], '">\n                    ').concat(svg, '\n                </span>\n                <span class="').concat(class_names[2], '">').concat(name, "</span>\n            </div>");
-                    }(key, sub_class_names, svg_map[key], btn_list[key]);
-                }).join("");
-                return "" + '<div id="bp_toolbar" class="'.concat(main_class_name, '">\n            ').concat(toolbar_elements, "\n            ").concat(more_style, "\n        </div>");
-            }(toolbar_class, [ span_class, span_class_svg, span_class_text ]));
-        } else $("#toolbar_module")[0] && $("#toolbar_module").after('<div id="bp_toolbar" class="tool-bar clearfix report-wrap-module report-scroll-module media-info" scrollshow="true"> <div id="setting_btn" class="like-info"> <i class="iconfont icon-add"></i><span>脚本设置</span> </div> <div id="bilibili_parse" class="like-info"> <i class="iconfont icon-customer-serv"></i><span>请求地址</span> </div> <div id="video_download" class="like-info" style="display:none"> <i class="iconfont icon-download"></i><span>下载视频</span> </div> <div id="video_download_2" class="like-info" style="display:none"> <i class="iconfont icon-download"></i><span>下载音频</span> </div> <div id="video_download_all" class="like-info"> <i class="iconfont icon-download"></i><span>批量下载</span> </div> <div class="more">更多<div class="more-ops-list"> <ul> <li><span id="download_danmaku">下载弹幕</span></li> <li><span id="download_subtitle">下载字幕</span></li> </ul> </div> </div> <style>.tool-bar .more{float:right;cursor:pointer;color:#757575;font-size:16px;transition:all .3s;position:relative;text-align:center}.tool-bar .more:hover .more-ops-list{display:block}.tool-bar:after{display:block;content:"";clear:both}.more-ops-list{display:none;position:absolute;width:80px;left:-65px;z-index:30;text-align:center;padding:10px 0;background:#fff;border:1px solid #e5e9ef;box-shadow:0 2px 4px 0 rgba(0,0,0,.14);border-radius:2px;font-size:14px;color:#222}.more-ops-list li{position:relative;height:34px;line-height:34px;cursor:pointer;transition:all .3s}.more-ops-list li:hover{color:#00a1d6;background:#e7e7e7}</style> </div> ');
-        $("#limit-mask-wall")[0] && $("#limit-mask-wall").remove(), $("#video_download").hide(), 
-        $("#video_download_2").hide();
+    function initToolbar(root) {
+        var toolbar = document.createElement("div");
+        toolbar.id = "bp_toolbar";
+        toolbar.setAttribute("aria-label", "B 站下载");
+        toolbar.innerHTML =
+            '<style>' +
+            '#bp_toolbar{position:fixed;left:16px;bottom:16px;z-index:9000;color:#18191c;font:14px system-ui}' +
+            '#bp_toolbar summary,#bp_toolbar button{padding:8px 12px;border:1px solid #e3e5e7;border-radius:6px;background:#fff;color:inherit;cursor:pointer}' +
+            '#bp_toolbar .bp-toolbar-actions{position:absolute;bottom:calc(100% + 6px);left:0;display:grid;gap:6px;min-width:116px}' +
+            '</style>' +
+            '<details><summary>视频下载</summary><div class="bp-toolbar-actions">' +
+            '<button type="button" id="setting_btn">脚本设置</button>' +
+            '<button type="button" id="bilibili_parse">请求地址</button>' +
+            '<button type="button" id="video_download" style="display:none">下载视频</button>' +
+            '<button type="button" id="video_download_2" style="display:none">下载音频</button>' +
+            '<button type="button" id="video_download_all">批量下载</button>' +
+            '<button type="button" id="download_subtitle">下载字幕</button>' +
+            '<button type="button" id="download_danmaku">下载弹幕</button>' +
+            '</div></details>';
+        root.appendChild(toolbar);
+        var menu = toolbar.querySelector("details");
+        $(toolbar).on("click", "button", function() {
+            if (this.id !== "bilibili_parse") menu.open = false;
+        });
     }
     function main_typeof(o) {
         return main_typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
@@ -4359,7 +4313,7 @@
         function Main() {
             !function main_classCallCheck(a, n) {
                 if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
-            }(this, Main), console.log("\n".concat(" %c bilibili-parse-download.user.js v", "2.9.0", " ").concat("0ee920a", " %c https://github.com/injahow/user.js ", "\n", "\n"), "color: #fadfa3; background: #030307; padding:5px 0;", "background: #fadfa3; padding:5px 0;");
+            }(this, Main), console.log("\n".concat(" %c bilibili-parse-download.user.js v", "2.9.1", " ").concat("local", " %c https://github.com/injahow/user.js ", "\n", "\n"), "color: #fadfa3; background: #030307; padding:5px 0;", "background: #fadfa3; padding:5px 0;");
         }
         return function main_createClass(e, r, t) {
             return r && main_defineProperties(e.prototype, r), t && main_defineProperties(e, t), 
@@ -4367,30 +4321,6 @@
                 writable: !1
             }), e;
         }(Main, [ {
-            key: "loadToolbar",
-            value: function loadToolbar() {
-                var observer, timer;
-                var mount = function() {
-                    if (!document.querySelector("#arc_toolbar_report, #playlistToolbar, #videoToolbar, .toolbar, .edu-play-left > :nth-child(2), #toolbar_module")) return;
-                    initToolbar();
-                    if (document.getElementById("bp_toolbar")) {
-                        if (observer) observer.disconnect();
-                        clearTimeout(timer);
-                        return true;
-                    }
-                };
-                if (mount()) return;
-                observer = new MutationObserver(mount);
-                observer.observe(document.body, { childList: true, subtree: true });
-                var timeout = parseInt(config_config.show_ui_timeout, 10);
-                timer = setTimeout(function() {
-                    if (mount()) return;
-                    if ("1" === config_config.show_ui_confirm && "1" !== config_config.show_ui_confirm_load_force) {
-                        MessageBox_confirm("尚未找到 B 站工具栏，是否立即重试？", mount, null);
-                    }
-                }, (timeout > 0 ? timeout : 6) * 1000);
-            }
-        }, {
             key: "init",
             value: function init() {
                 var root_div = document.createElement("div");
@@ -4441,8 +4371,8 @@
                     };
                 }("#".concat(root_div.id)), function initMessage(el) {
                     el && $(el)[0] ? $(el).append(message) : $("body").append(message);
-                }("#".concat(root_div.id)), this.loadToolbar(), user.lazyInit(), auth.checkLoginStatus(), 
-                check.refresh(), $("#".concat(root_div.id)).append('<link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/dplayer/1.25.0/DPlayer.min.css">'), 
+                }("#".concat(root_div.id)), initToolbar(root_div), user.lazyInit(), auth.checkLoginStatus(),
+                check.refresh(),
                 $("#".concat(root_div.id)).append('<a id="video_url" style="display:none;" target="_blank" referrerpolicy="origin" href="#"></a>'), 
                 $("#".concat(root_div.id)).append('<a id="video_url_2" style="display:none;" target="_blank" referrerpolicy="origin" href="#"></a>');
             }

@@ -51,9 +51,10 @@
     function messageBox(ctx, type) {
         "confirm" === type ? $('.message-box-btn button[name="cancel"]').show() : "alert" === type && $('.message-box-btn button[name="cancel"]').hide(), 
         ctx.html ? $("#message_box_context").html('<div style="font-size:18px">'.concat(ctx.html, "</div>")) : $("#message_box_context").html('<div style="font-size:18px">╰(￣▽￣)╮</div>'), 
-        scroll_scroll.hide(), $("#message_box").show(), $("#message_box").animate({
-            opacity: "1"
-        }, 300);
+        scroll_scroll.hide();
+        var box = $("#message_box").stop(true, true).show();
+        if (ctx.immediate) box.css("opacity", 1);
+        else box.animate({ opacity: "1" }, 300);
         var option = {
             affirm: function affirm() {
                 $("#message_box").hide(), $("#message_box").css("opacity", 0), scroll_scroll.show(), 
@@ -3362,14 +3363,19 @@
         download_all: function download_all() {
             var vb = video.base(), _ref = [ video.get_quality().q, vb.total() ], q = _ref[0], total = _ref[1];
             var videoTitles = [];
-            for (var video_html = "", i = 0; i < total; i++) {
-                var title = String(vb.title(i + 1) || "");
-                videoTitles.push(title.toLowerCase());
-                var safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                video_html += '<div><label for="option_' + i + '"><div style="color:rgba(0,0,0,0.5);">' +
-                    '<input type="checkbox" id="option_' + i + '" name="option_video" value="' + i + '"> ' +
-                    'P' + (i + 1) + ' ' + safeTitle + '</div></label><hr></div>';
-            }
+            var renderVideoRows = function(start, end) {
+                var rows = "";
+                for (var i = start; i < end; i++) {
+                    var title = String(vb.title(i + 1) || "");
+                    videoTitles.push(title.toLowerCase());
+                    var safeTitle = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    rows += '<div><label for="option_' + i + '"><span style="color:rgba(0,0,0,0.5);">' +
+                        '<input type="checkbox" id="option_' + i + '" name="option_video" value="' + i + '"> ' +
+                        'P' + (i + 1) + ' ' + safeTitle + '</span></label></div>';
+                }
+                return rows;
+            };
+            var video_html = renderVideoRows(0, total);
             var _step, option_support_html = "", _iterator = download_createForOfIteratorHelper(video.get_quality_support());
             try {
                 for (_iterator.s(); !(_step = _iterator.n()).done; ) {
@@ -3381,20 +3387,88 @@
             } finally {
                 _iterator.f();
             }
-            var msg = "" + '<div style="margin:2% 0;">\n            <label>视频格式:</label>\n            <select id="dl_format">\n                <option value="mp4" selected>MP4</option>\n                <option value="flv">FLV</option>\n                <option value="dash">DASH</option>\n            </select>\n            &nbsp;&nbsp;无法设置MP4清晰度\n        </div>\n        <div style="margin:2% 0;">\n            <label>视频质量:</label>\n            <select id="dl_quality">\n                '.concat(option_support_html, '\n            </select>\n        </div>\n        <div style="margin:2% 0;">\n            <label>下载选择:</label>\n            <span style="color:rgba(0,0,0,1);">\n                <input type="checkbox" id="dl_video" name="dl_option" checked="checked">\n                <label for="dl_video">视频</label>\n            </span>\n            <span style="color:rgba(0,0,0,1);">\n                <input type="checkbox" id="dl_audio" name="dl_option" checked="checked">\n                <label for="dl_audio">音频</label>\n            </span>\n            <span style="color:rgba(0,0,0,0.5);">\n                <input type="checkbox" id="dl_subtitle" name="dl_option">\n                <label for="dl_subtitle">字幕</label>\n            </span>\n            <span style="color:rgba(0,0,0,0.5);">\n                <input type="checkbox" id="dl_danmaku" name="dl_option">\n                <label for="dl_danmaku">弹幕</label>\n            </span><br/>\n            <small>提示：下载音频需要修改视频格式为DASH</small>\n        </div>\n        <div style="margin:2% 0;">\n            <label>保存目录:</label>\n            <input id="dl_rpc_dir" placeholder="').concat(("post" === rpc_type() ? config_config.rpc_dir : config_config.ariang_dir) || "为空使用默认目录", '" style="width:80%;"/>\n        </div>\n        <b>\n            <span style="color:red;">为避免请求被拦截，设置了延时且不支持下载无法播放的视频；请勿频繁下载过多视频，可能触发风控导致不可再下载！</span>\n        </b><br />\n        <div style="margin:2% 0;">\n            <label for="dl_search">搜索视频:</label>\n            <input type="search" id="dl_search" placeholder="输入标题关键字或 P12" aria-controls="dl_video_list">\n            <span id="dl_search_status" role="status"></span>\n        </div>\n        <div id="dl_video_list" style="height:240px;width:100%;overflow:auto;background:rgba(0,0,0,0.1);">\n            ').concat(video_html, '\n        </div>\n        <div style="margin:2% 0;">\n            <button id="checkbox_btn">全选</button>\n        </div>');
-            msg += '<div style="margin:2% 0;">按住 Shift 点击可选择连续分 P。<br>' +
-                '<input id="dl_range" aria-label="分 P 范围" placeholder="例如 3-10, 15, 20-25"> ' +
-                '<button id="dl_range_apply" type="button">按范围选择</button> ' +
-                '<span id="dl_selected_count" aria-live="polite"></span></div>' +
-                '<div style="margin:2% 0;"><select id="dl_presets" aria-label="下载预设"></select> ' +
-                '<button id="dl_preset_save" type="button">保存当前设置</button> ' +
-                '<button id="dl_preset_delete" type="button">删除预设</button> ' +
-                '<button id="dl_preset_download" type="button">用预设下载</button></div>';
+            var msg = `<style>
+                #message_box .message-box-bg:has(#bp_batch_download) {
+                    box-sizing:border-box;
+                    width:min(540px, calc(100vw - 24px));
+                    padding:12px 16px;
+                }
+                #message_box .message-box-bg:has(#bp_batch_download) > span { font-size:16px !important; }
+                #message_box #message_box_context:has(#bp_batch_download) { margin:6px 0 10px !important; }
+                #message_box #message_box_context:has(#bp_batch_download) ~ br { display:none; }
+                #message_box .message-box-bg:has(#bp_batch_download) .message-box-btn button {
+                    width:84px;
+                    height:32px;
+                    font-size:14px;
+                }
+                #bp_batch_download { display:grid; gap:6px; font-size:13px; line-height:1.4; }
+                #bp_batch_download .dl-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+                #bp_batch_download input, #bp_batch_download button, #bp_batch_download select { font:inherit; }
+                #bp_batch_download input[type=checkbox] { vertical-align:middle; margin:0 2px 0 0; }
+                #bp_batch_download small { font-size:11px; }
+                #bp_batch_download #dl_rpc_dir { flex:1; min-width:100px; }
+                #bp_batch_download #dl_search, #bp_batch_download #dl_range { width:150px; max-width:100%; }
+                #bp_batch_download #dl_video_list {
+                    max-height:clamp(48px, calc(100dvh - 335px), 240px);
+                    overflow:auto;
+                    background:rgba(0,0,0,0.05);
+                }
+                #bp_batch_download #dl_video_list > div + div { border-top:1px solid #ddd; }
+                #bp_batch_download #dl_video_list label { display:block; padding:3px 6px; overflow-wrap:anywhere; }
+            </style>
+            <div id="bp_batch_download">
+                <div class="dl-row">
+                    <label for="dl_format">视频格式</label>
+                    <select id="dl_format">
+                        <option value="mp4">MP4</option>
+                        <option value="flv">FLV</option>
+                        <option value="dash">DASH</option>
+                    </select>
+                    <label for="dl_quality">视频质量</label>
+                    <select id="dl_quality">${option_support_html}</select>
+                    <small>MP4 无法设置清晰度</small>
+                </div>
+                <div class="dl-row">
+                    <span>下载选项</span>
+                    <label><input type="checkbox" id="dl_video" name="dl_option" checked>视频</label>
+                    <label style="color:rgba(0,0,0,0.5);"><input type="checkbox" id="dl_audio" name="dl_option">音频</label>
+                    <label><input type="checkbox" id="dl_subtitle" name="dl_option" checked>字幕</label>
+                    <label style="color:rgba(0,0,0,0.5);"><input type="checkbox" id="dl_danmaku" name="dl_option">弹幕</label>
+                    <small>音频需选择 DASH 格式</small>
+                </div>
+                <div class="dl-row">
+                    <label for="dl_rpc_dir">保存目录</label>
+                    <input id="dl_rpc_dir">
+                </div>
+                <small>批量视频由 RPC 下载，请确保下载器已运行。</small>
+                <small style="color:#b42318;">仅支持可播放的视频。下载请求设有间隔，频繁下载可能触发风控。</small>
+                <div class="dl-row">
+                    <label for="dl_search">搜索视频</label>
+                    <input type="search" id="dl_search" placeholder="输入标题关键字或 P12" aria-controls="dl_video_list">
+                    <small id="dl_search_status" role="status"></small>
+                </div>
+                <div id="dl_video_list">${video_html}</div>
+                <div class="dl-row">
+                    <button id="checkbox_btn" type="button">全选</button>
+                    <input id="dl_range" aria-label="分 P 范围" placeholder="例如 3-10, 15, 20-25">
+                    <button id="dl_range_apply" type="button">按范围选择</button>
+                    <span id="dl_selected_count" aria-live="polite"></span>
+                    <small>Shift 连选分 P</small>
+                    <small id="dl_load_status" role="status"></small>
+                </div>
+                <div class="dl-row">
+                    <select id="dl_presets" aria-label="下载预设"></select>
+                    <button id="dl_preset_save" type="button">保存当前设置</button>
+                    <button id="dl_preset_delete" type="button">删除预设</button>
+                    <button id="dl_preset_download" type="button">用预设下载</button>
+                </div>
+            </div>`;
             var subtitleDirectory, choosingSubtitleDirectory = false;
-            MessageBox_confirm(msg, function() {
-                for (var _ref2 = [ $("#dl_video").is(":checked"), $("#dl_audio").is(":checked"), $("#dl_subtitle").is(":checked"), $("#dl_danmaku").is(":checked"), $("#dl_format").val(), $("#dl_quality").val() || q, $("#dl_rpc_dir").val() ], dl_video = _ref2[0], dl_audio = _ref2[1], dl_subtitle = _ref2[2], dl_danmaku = _ref2[3], dl_format = _ref2[4], dl_quality = _ref2[5], dl_rpc_dir = _ref2[6], video_tasks = [], _i2 = 0; _i2 < total; _i2++) if ($("input#option_".concat(_i2)).is(":checked")) {
-                    var p = _i2 + 1;
-                    video_tasks.push({
+            var startBatchDownload = function() {
+                var _ref2 = [ $("#dl_video").is(":checked"), $("#dl_audio").is(":checked"), $("#dl_subtitle").is(":checked"), $("#dl_danmaku").is(":checked"), $("#dl_format").val(), $("#dl_quality").val() || q, $("#dl_rpc_dir").val() ], dl_video = _ref2[0], dl_audio = _ref2[1], dl_subtitle = _ref2[2], dl_danmaku = _ref2[3], dl_format = _ref2[4], dl_quality = _ref2[5], dl_rpc_dir = _ref2[6];
+                var video_tasks = options.filter(function(option) { return option.checked; }).map(function(option) {
+                    var p = Number(option.value) + 1;
+                    return {
                         cid: vb.cid(p),
                         p: p,
                         q: dl_quality,
@@ -3403,8 +3477,8 @@
                         dl_video: dl_video,
                         dl_audio: dl_audio,
                         rpc_dir: dl_rpc_dir
-                    });
-                }
+                    };
+                });
                 (dl_video || dl_audio) && ("post" === rpc_type() && "0" !== config_config.show_motrix_confirm ? checkMotrixRunningBeforeExecute(function() {
                     download_videos([].concat(video_tasks));
                 }) : download_videos([].concat(video_tasks))), dl_subtitle && save_batch_subtitles(video_tasks, subtitleDirectory, vb.getFilename() + "_vtt.zip"), 
@@ -3413,19 +3487,22 @@
                 }).catch(function() {
                     message_Message_warning("弹幕压缩组件加载失败");
                 }));
-            }), $("#dl_format").val(config_config.format), $("#dl_quality").val(q);
-            var dl_format_change_evt = function dl_format_change_evt(format) {
-                "dash" === format ? ($("#dl_audio").prop("checked", !0).parent().css("color", "rgba(0,0,0,1)"), 
-                $("#dl_audio").prop("disabled", !1)) : ($("#dl_audio").prop("checked", !1).parent().css("color", "rgba(0,0,0,0.5)"), 
-                $("#dl_audio").prop("disabled", !0));
             };
+            messageBox({
+                html: msg,
+                immediate: true,
+                callback: { affirm: startBatchDownload }
+            }, "confirm");
+            $("#dl_format").val(config_config.format);
+            $("#dl_quality").val(q);
             var dialog = $("#message_box_context");
             var options = dialog.find('input[name="option_video"]').get();
             var anchor = null;
             var videoList = dialog.find("#dl_video_list")[0];
             var searchStatus = dialog.find("#dl_search_status");
-            dialog.find("#dl_search").on("input", function() {
-                var keyword = this.value.trim().toLowerCase();
+            var searchInput = dialog.find("#dl_search");
+            var updateSearch = function() {
+                var keyword = searchInput.val().trim().toLowerCase();
                 var page = /^p\s*(\d+)$/.exec(keyword);
                 var matches = 0;
                 options.forEach(function(element, index) {
@@ -3433,9 +3510,12 @@
                     videoList.children[index].hidden = !visible;
                     if (visible) matches++;
                 });
-                videoList.scrollTop = 0;
                 searchStatus.text(!keyword ? "" : (matches ? "匹配 " + matches + " 项" : "没有匹配的视频") +
-                    " · 已勾选项会保留，全选和范围操作仍按完整列表计算");
+                    " · 保留已选项");
+            };
+            searchInput.on("input", function() {
+                updateSearch();
+                videoList.scrollTop = 0;
             });
             var setChecked = function(element, checked) {
                 element.checked = checked;
@@ -3465,10 +3545,10 @@
                 setChecked(element, checked);
                 updateSelection();
             };
-            $(options).on("click", function(event) {
+            $(videoList).on("click", 'input[name="option_video"]', function(event) {
                 clickOption(this, event);
             });
-            $(options).closest("label").on("click", function(event) {
+            $(videoList).on("click", "label", function(event) {
                 var element = this.control;
                 if (event.shiftKey && element && event.target !== element) {
                     event.preventDefault();
@@ -3511,11 +3591,17 @@
 
             var formatInput = dialog.find("#dl_format");
             var qualityInput = dialog.find("#dl_quality");
-            var directoryInput = dialog.find("#dl_rpc_dir");
+            var directoryInput = dialog.find("#dl_rpc_dir")
+                .attr("placeholder", ("post" === rpc_type() ? config_config.rpc_dir : config_config.ariang_dir) || "为空使用默认目录");
             var outputOptions = dialog.find('input[name="dl_option"]');
-            dl_format_change_evt(formatInput.val());
-            formatInput.on("change", function() { dl_format_change_evt(this.value); });
-            outputOptions.on("click", function() { setChecked(this, this.checked); });
+            var audioOption = dialog.find("#dl_audio")[0];
+            var updateAudioOption = function() {
+                audioOption.disabled = formatInput.val() !== "dash";
+                if (audioOption.disabled) setChecked(audioOption, false);
+            };
+            updateAudioOption();
+            formatInput.on("change", updateAudioOption);
+            outputOptions.on("change", function() { setChecked(this, this.checked); });
 
             var presetKey = "batch_download_presets";
             var presets = [];
@@ -3593,7 +3679,7 @@
             });
             var confirmButton = $('#message_box .message-box-btn button[name="affirm"]')[0];
             var confirmDownload = confirmButton.onclick;
-            confirmButton.onclick = async function() {
+            confirmButton.onclick = async function validateDownload() {
                 if (choosingSubtitleDirectory) return;
                 if (!options.some(function(element) { return element.checked; })) {
                     message_Message_warning("请至少选择一个分 P");
@@ -3621,23 +3707,63 @@
                     } finally {
                         choosingSubtitleDirectory = false;
                     }
-                    confirmDownload();
+                    if (confirmButton.onclick === validateDownload && $("#message_box").css("display") !== "none") {
+                        confirmDownload();
+                    }
                 }
             };
-            if ("0" !== config_config.video_list_auto_scroll_load) {
-                var _$$, h = null === (_$$ = $("#playlist-video-action-list")[0]) || void 0 === _$$ ? void 0 : _$$.scrollHeight;
-                if (!h) return;
-                var timer1 = null, timer2 = null, old_h = h, change_count = 0, not_change_count = 0;
-                timer1 = setInterval(function() {
-                    $("#playlist-video-action-list").scrollTop($("#playlist-video-action-list")[0].scrollHeight), 
-                    setTimeout(function() {
-                        $("#playlist-video-action-list").scrollTop(0);
-                    }, 100), not_change_count > 6 && clearInterval(timer1);
-                }, 1e3), timer2 = setInterval(function() {
-                    (h = $("#playlist-video-action-list")[0].scrollHeight) > old_h ? (change_count++, 
-                    MessageBox_alert("正在加载视频列表，请稍后...")) : not_change_count++, old_h = h, not_change_count > 6 && (clearInterval(timer1), 
-                    clearInterval(timer2), message_Message_info("视频列表加载结束"), change_count > 0 && download_all());
-                }, 500);
+            var playlist = $("#playlist-video-action-list")[0];
+            if ("0" !== config_config.video_list_auto_scroll_load && playlist && playlist.scrollHeight) {
+                var activeConfirm = confirmButton.onclick;
+                var playlistUrl = location.href;
+                var originalScrollTop = playlist.scrollTop;
+                var height = playlist.scrollHeight;
+                var loadStatus = dialog.find("#dl_load_status").text("后台加载列表…");
+                var unchanged = 0, attempts = 0;
+                var appendLoadedVideos = function() {
+                    var latest;
+                    try {
+                        latest = video.base();
+                    } catch (err) {
+                        // Bilibili can briefly replace the playlist metadata while it loads.
+                        return;
+                    }
+                    var latestTotal = latest.total();
+                    if (latestTotal > total) {
+                        vb = latest;
+                        videoList.insertAdjacentHTML("beforeend", renderVideoRows(total, latestTotal));
+                        total = latestTotal;
+                        options = Array.from(videoList.querySelectorAll('input[name="option_video"]'));
+                        updateSearch();
+                        updateSelection();
+                        unchanged = 0;
+                    }
+                };
+                var stopLoading = function() {
+                    clearInterval(loadTimer);
+                    playlist.scrollTop = originalScrollTop;
+                    loadStatus.text("");
+                };
+                var loadTimer = setInterval(function() {
+                    if (confirmButton.onclick !== activeConfirm || $("#message_box").css("display") === "none" ||
+                            !playlist.isConnected || location.href !== playlistUrl) {
+                        stopLoading();
+                        return;
+                    }
+                    if (playlist.scrollHeight !== height) {
+                        height = playlist.scrollHeight;
+                        unchanged = 0;
+                        appendLoadedVideos();
+                    } else {
+                        unchanged++;
+                        if (unchanged === 6) appendLoadedVideos();
+                    }
+                    if (++attempts >= 20 || unchanged >= 6) {
+                        stopLoading();
+                    } else {
+                        playlist.scrollTop = height;
+                    }
+                }, 750);
             }
         },
         download_danmaku_ass: download_danmaku_ass,
@@ -4128,7 +4254,6 @@
         for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
         return n;
     }
-    var video_download_all_rpc_confirm = !0;
     var event_event = {
         setting_btn: function setting_btn() {
             for (var key in user.lazyInit(!0), config_config) $("#".concat(key)).val(config_config[key]);
@@ -4202,9 +4327,12 @@
             }
         },
         video_download_all: function video_download_all() {
-            user.lazyInit(!0), "local" === config_config.request_type || auth.hasAuth() ? "rpc" !== config_config.download_type && video_download_all_rpc_confirm ? MessageBox_confirm("仅支持使用RPC接口批量下载，请确保RPC环境正常，是否继续？", function() {
-                Download.download_all(), video_download_all_rpc_confirm = !1;
-            }) : Download.download_all() : MessageBox_confirm("批量下载仅支持本地请求或授权用户使用RPC接口下载，是否进行授权？", function() {
+            user.lazyInit(!0);
+            if ("local" === config_config.request_type || auth.hasAuth()) {
+                Download.download_all();
+                return;
+            }
+            MessageBox_confirm("批量下载仅支持本地请求或授权用户使用RPC接口下载，是否进行授权？", function() {
                 auth.login();
             });
         },
